@@ -9,7 +9,7 @@ TOURNAMENT_SELECTION_SIZE = 1
 MUTATION_RATE = 0.1
 GENERATIONS = 2000
 UNIVERSITY_START_TIME = datetime.strptime("08:30", "%H:%M")
-UNIVERSITY_END_TIME = datetime.strptime("16:45", "%H:%M")
+UNIVERSITY_END_TIME = datetime.strptime("17:45", "%H:%M")
 LUNCH_BREAK_START = datetime.strptime("12:45", "%H:%M")
 LUNCH_BREAK_END = datetime.strptime("13:30", "%H:%M")
 TIME_SLOT_DURATION = timedelta(hours=1)
@@ -41,9 +41,10 @@ class Professor:
 
 
 class Course:
-    def __init__(self, number, name, professors, lectures_per_week, labs_per_week=0):
+    def __init__(self, number, name, course_type, professors, lectures_per_week, labs_per_week=0):
         self._number = number
         self._name = name
+        self._course_type = course_type
         self._professors = professors
         self._lectures_per_week = lectures_per_week
         self._labs_per_week = labs_per_week
@@ -53,6 +54,9 @@ class Course:
 
     def get_name(self):
         return self._name
+
+    def is_lab(self):
+        return self._course_type == "lab"
 
     def get_professors(self):
         return self._professors
@@ -174,6 +178,8 @@ class Data:
                         class_time_id += 1
                 current_time += TIME_SLOT_DURATION
 
+
+
 class Schedule:
     def __init__(self, data, panel):
         self._data = data
@@ -193,6 +199,7 @@ class Schedule:
 
         for dept in self._data.get_depts():
             for course in dept.get_courses():
+                # Schedule Lectures
                 for _ in range(course.get_lectures_per_week()):
                     lecture_class_times = [mt for mt in available_class_times if mt.get_duration() == TIME_SLOT_DURATION]
                     rd.shuffle(lecture_class_times)
@@ -217,11 +224,14 @@ class Schedule:
                             })
                             available_class_times.remove(lecture_class_time)
 
-                # Schedule Labs similarly...
+                # Schedule Labs
                 for _ in range(course.get_labs_per_week()):
                     lab_class_times = [mt for mt in available_class_times if mt.get_duration() == LAB_TIME_SLOT_DURATION]
                     rd.shuffle(lab_class_times)
                     lab_class_time = lab_class_times[0]
+
+                    lab_courses = [c for c in dept.get_courses() if c.is_lab()] 
+                    rd.shuffle(lab_courses)  
 
                     available_lab_rooms = self._data.get_lab_rooms().copy()
                     if len(available_lab_rooms) < self._panel.get_num_batches():
@@ -230,15 +240,16 @@ class Schedule:
                     rd.shuffle(available_lab_rooms)
                     for batch_num in range(1, self._panel.get_num_batches() + 1):
                         lab_room = available_lab_rooms.pop()
-                        professor = rd.choice(course.get_professors()) if course.get_professors() else None
+                        lab_course = lab_courses[0] 
+
+                        professor = rd.choice(lab_course.get_professors()) if lab_course.get_professors() else None
                         if professor:
-                         
                             if self._check_conflicts(lab_class_time, lab_room, professor):
                                 self._classes.append({
                                     "panel": self._panel.get_name(),
                                     "batch": f"Batch {batch_num}",
                                     "department": dept.get_name(),
-                                    "course": f"{course.get_name()} (Lab)",
+                                    "course": f"{lab_course.get_name()} (Lab)",
                                     "room": lab_room.get_number(),
                                     "professor": professor.get_name(),
                                     "class_time": f"{lab_class_time.get_day()} {lab_class_time.get_time()} ({lab_class_time.get_duration()})"
@@ -246,6 +257,7 @@ class Schedule:
                             available_class_times.remove(lab_class_time)
 
         return self
+
 
     def _check_conflicts(self, class_time, room, professor):
        
